@@ -21,6 +21,7 @@
 # UPDATE 01/19/2011: added sound effects and better menu.
 import pygame, sys, time, random, os
 from pygame.locals import *
+import thread
 
 # Gyro controle
 import bluepy
@@ -36,11 +37,10 @@ pygame.display.set_caption('PongClone')
 white = [255, 255, 255]
 black = [0, 0, 0]
 clock = pygame.time.Clock()
-# Accelerator controle
-tag = sensortag.SensorTag("24:71:89:BD:10:01")
-tag.accelerometer.enable()
-# Read speed of accelerator data (each x Frame)
-rSpeedAcc = 3
+# Event declaration
+XDATA = pygame.USEREVENT + 0
+KILLXDATA = pygame.USEREVENT + 1
+pygame.event.set_allowed([XDATA, KILLXDATA])
 
 ###################################################################################################################################################################
 # This is a menu class module. You can make text-based menus of any length with it
@@ -76,13 +76,39 @@ def get_x_rotation(x,y,z):
     radians = math.atan2(y, dist(x,z))
     return math.degrees(radians)
 
-def get_x_angle(tag):
+def movementEvent():
+    print "Start!"
+    # Accelerator controle
+    tag = sensortag.SensorTag("24:71:89:BD:10:01")
+    tag.accelerometer.enable()
+    time.sleep(1.0)
+    running = True
+    
 
-    ax,ay,az = tag.accelerometer.read()
-                     
-    #x_angle = get_x_rotation(ax,ay,az)
-    #y_angle = get_y_rotation(ax,ay,az)
-    return get_x_rotation(ax,ay,az)
+    while running: 
+        ax,ay,az = tag.accelerometer.read()
+
+        rotation_x = get_x_rotation(ax,ay,az)
+        #rotation_y = get_y_rotation(accel_scaled_x, accel_scaled_y, accel_scaled_z)
+
+        my_event = pygame.event.Event(XDATA, angle=rotation_x)
+
+        xdataE = 0
+        for event in pygame.event.get():
+            if event.type == XDATA:
+                print "XDATA Found"
+                xdataE+=1
+            elif event.type == KILLXDATA:
+                print "Kill!"
+                running = False
+
+        if xdataE == 0:
+            pygame.event.post(my_event)
+            
+    tag.disconnect()
+    del tag
+    print "Exit!"
+    
 
 class Menu():
 	# Menu class definition
@@ -222,22 +248,16 @@ def newGame(twoplayer=False):
 	global white, black
 	class Paddle():
 		def __init__(self, upkey, downkey):
-			global screen, tag
+			global screen
 			self.area = [screen.get_width(), screen.get_height()]
 			self.pos = [20, self.area[1]/2]
 			self.rect = Rect((self.pos), (10, 40))
 			self.speed = 5
 			self.score = 0
 			self.upkey, self.downkey = upkey, downkey
-			self.framesPassed = 0
-			self.tag = tag
-                        time.sleep(1.0)
+			self.now = time.time()
 		def update(self):
-			global screen, white, rSpeedAcc
-			self.framesPassed+=1
-
-			if(self.framesPassed == rSpeedAcc):                            
-                            x_angle = get_x_angle(self.tag)
+			global screen, white
                            
                         
 			keys = pygame.key.get_pressed()
@@ -248,12 +268,15 @@ def newGame(twoplayer=False):
 				if self.rect.bottom < self.area[1]-20:
 					self.rect.bottom += self.speed
 
-			if(self.framesPassed == rSpeedAcc):
-                            if(x_angle > 0):
-                                    self.rect.top = (((round(x_angle) * -1) * 14.6) + 240)
-                            elif(x_angle < 0):
-                                    self.rect.bottom = (((round(x_angle) * -1) * 15) + 240)
-                            self.framesPassed = 0
+                        for event in pygame.event.get():
+                            if event.type == XDATA:
+                                #print  time.time() - self.now, " ", repr(event.angle)
+                                if(event.angle > 0):
+                                        self.rect.top = (((round(event.angle) * -1) * 20) + 240)
+                                elif(event.angle < 0):
+                                        self.rect.bottom = (((round(event.angle) * -1) * 20) + 240)
+                            elif event.type == KILLXDATA:
+                                pygame.event.post(pygame.event.Event(KILLXDATA))
 			pygame.draw.rect(screen, white, self.rect)
 			return
 	
@@ -354,6 +377,7 @@ def gameLoop(paddle, enemy, ball, twoplayer, paddle_two):
 	paddlescore = pygame.font.Font(None, 32)
 	enemyscore = pygame.font.Font(None, 32)
 	topscore = 0
+	t = thread.start_new_thread(movementEvent,())
 	screen.fill(black)
 	screen.blit(paddlescore.render('3', True, white), ball.center)
 	pygame.display.flip()
@@ -370,7 +394,7 @@ def gameLoop(paddle, enemy, ball, twoplayer, paddle_two):
 	screen.blit(paddlescore.render('GO!', True, white), ball.center)
 	pygame.display.flip()
 	time.sleep(0.5)
-	while not topscore > 9:
+	while not topscore > 3:
 		screen.fill(black)
 		paddle.update()
 		if twoplayer:
@@ -395,9 +419,10 @@ def gameLoop(paddle, enemy, ball, twoplayer, paddle_two):
 			if event.type == pygame.QUIT:
 				pygame.quit()
 				sys.exit()
-		clock.tick(40)
-		#print "fps: ", clock.get_fps()
+		clock.tick(60)
 		pygame.display.flip()
+	pygame.event.post(pygame.event.Event(KILLXDATA))
+	print "Command to Kill!!!"
 	screen.fill(black)
 	if not twoplayer:
 		if paddle.score == topscore:
@@ -410,6 +435,8 @@ def gameLoop(paddle, enemy, ball, twoplayer, paddle_two):
 				for event in pygame.event.get():
 					if event.type == pygame.KEYDOWN:
 						menu()
+					elif event.type == KILLXDATA:
+                                            pygame.event.post(pygame.event.Event(KILLXDATA))
 		else:
 			screen.blit(paddlescore.render('You Lost! This bucket of bolts beat a smart human like', True, white, black), [0, 0])
 			screen.blit(paddlescore.render('yourself! Too bad! Press any key to return to menu.', True, white, black), [0, 32])
@@ -418,6 +445,8 @@ def gameLoop(paddle, enemy, ball, twoplayer, paddle_two):
 				for event in pygame.event.get():
 					if event.type == pygame.KEYDOWN:
 						menu()
+					elif event.type == KILLXDATA:
+                                            pygame.event.post(pygame.event.Event(KILLXDATA))
 	else:
 		if paddle.score == topscore:
 			screen.blit(paddlescore.render('Player 1 won! (left side). Press any key to', True, white, black), [0, 0])
@@ -427,6 +456,8 @@ def gameLoop(paddle, enemy, ball, twoplayer, paddle_two):
 				for event in pygame.event.get():
 					if event.type == pygame.KEYDOWN:
 						menu()
+					elif event.type == KILLXDATA:
+                                            pygame.event.post(pygame.event.Event(KILLXDATA))
 		else:
 			screen.blit(paddlescore.render('Player 2 won! (right side). Press any key to', True, white, black), [0, 0])
 			screen.blit(paddlescore.render('to menu.', True, white, black), [0, 32])
@@ -435,6 +466,8 @@ def gameLoop(paddle, enemy, ball, twoplayer, paddle_two):
 				for event in pygame.event.get():
 					if event.type == pygame.KEYDOWN:
 						menu()
+					elif event.type == KILLXDATA:
+                                            pygame.event.post(pygame.event.Event(KILLXDATA))
 
 if __name__ == '__main__':
 	menu()
