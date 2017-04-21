@@ -40,7 +40,7 @@ clock = pygame.time.Clock()
 tag = sensortag.SensorTag("24:71:89:BD:10:01")
 tag.accelerometer.enable()
 # Read speed of accelerator data (each x Frame)
-rSpeedAcc = 2
+rSpeedAcc = 3
 
 ###################################################################################################################################################################
 # This is a menu class module. You can make text-based menus of any length with it
@@ -77,11 +77,12 @@ def get_x_rotation(x,y,z):
     return math.degrees(radians)
 
 def get_x_angle(tag):
+
     ax,ay,az = tag.accelerometer.read()
-                            
-    x_angle = get_x_rotation(ax,ay,az)
+                     
+    #x_angle = get_x_rotation(ax,ay,az)
     #y_angle = get_y_rotation(ax,ay,az)
-    return x_angle
+    return get_x_rotation(ax,ay,az)
 
 class Menu():
 	# Menu class definition
@@ -246,7 +247,8 @@ def newGame(twoplayer=False):
 			elif keys[self.downkey]:
 				if self.rect.bottom < self.area[1]-20:
 					self.rect.bottom += self.speed
-			elif(self.framesPassed == rSpeedAcc):
+
+			if(self.framesPassed == rSpeedAcc):
                             if(x_angle > 0):
                                     self.rect.top = (((round(x_angle) * -1) * 14.6) + 240)
                             elif(x_angle < 0):
@@ -282,9 +284,9 @@ def newGame(twoplayer=False):
 			self.rect = Rect((self.pos), (15, 15))
 			self.speed = [random.randint(-2, 2), random.randint(-2, 2)]
 			while self.speed[0] == 0:
-				self.speed[0] = random.randint(-2, 2)
+				self.speed[0] = random.randint(-4, 4)
 			while self.speed[1] == 0:
-				self.speed[1] = random.randint(-2, 2)
+				self.speed[1] = random.randint(-4, 4)
 			self.area = [screen.get_width(), screen.get_height()]
 			self.paddlecols = 0
 		def update(self, paddle, enemy):
@@ -393,8 +395,8 @@ def gameLoop(paddle, enemy, ball, twoplayer, paddle_two):
 			if event.type == pygame.QUIT:
 				pygame.quit()
 				sys.exit()
-		clock.tick(60)
-		print "fps: ", clock.get_fps()
+		clock.tick(40)
+		#print "fps: ", clock.get_fps()
 		pygame.display.flip()
 	screen.fill(black)
 	if not twoplayer:
